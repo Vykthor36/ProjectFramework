@@ -23,8 +23,11 @@ const char* fragmentShaderSource = "#version 330 core\n"
     "out vec4 FragColor;\n"
     "void main()\n"
     "{\n"
-    "   FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
+    "   FragColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);\n"
     "}\n\0";
+
+static const int WINDOW_SIZE = 750;
+static const int PARTICLE_NB = 1;
 
 namespace Utilities
 {
@@ -150,31 +153,6 @@ namespace Utilities
             return shaderProgram;
         }
 
-        const int createTriangle()
-        {
-            float vertices[] = {
-                -0.5f, -0.5f, 0.0f,
-                0.5f, -0.5f, 0.0f,
-                0.0f,  0.5f, 0.0f
-            };
-
-            unsigned int VBO, VAO;
-            glGenBuffers(1, &VBO); glGenVertexArrays(1, &VAO);
-
-            // Bind the "Vertex Array Object"
-            glBindVertexArray(VAO);
-
-            // Copying our vertices array into a buffer for OpenGL
-            glBindBuffer(GL_ARRAY_BUFFER, VBO);
-            glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-            // Setting our vertex attributes pointers
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*) 0);
-            glEnableVertexAttribArray(0);
-
-            return VAO;
-        }
-
         const int createRectangle()
         {         
             float vertices[] = {
@@ -263,7 +241,7 @@ int main()
     //glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); For macOS only
 
     // GLFW window initialization
-    GLFWwindow* window = glfwCreateWindow(800, 600, "Project Framework", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(WINDOW_SIZE, WINDOW_SIZE, "Project Framework", NULL, NULL);
     if (window == NULL)
     {
         std::cout << "Failed to create GLFW window!" << std::endl;
@@ -280,7 +258,7 @@ int main()
     }
 
     // Setting additional parameters
-    glViewport(0, 0, 800, 600);
+    glViewport(0, 0, WINDOW_SIZE, WINDOW_SIZE);
     glfwSetFramebufferSizeCallback(window, Utilities::OGL::framebufferSizeCallback);
 
     // Shadering initialization
@@ -291,7 +269,7 @@ int main()
 
     // Particule generation & offset creation
     std::vector<Particle> particles;
-    for (int i = 0; i < 1; i++) particles.push_back(Particle(0, 0, 0, 0));
+    for (int i = 0; i < PARTICLE_NB; i++) particles.push_back(Particle(0, 0, .00025, .00058));
     std::vector<float> offsets;
     for (const Particle& p : particles) 
     {
@@ -301,15 +279,18 @@ int main()
 
     unsigned int particlePosVBO;
     glGenBuffers(1, &particlePosVBO);
-    glBindBuffer(GL_ARRAY_BUFFER, particlePosVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 2 * particles.size(), &offsets[0], GL_STATIC_DRAW);
-    
+
     glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, particlePosVBO); // Every 'GL_ARRAY_BUFFER' operation next are linked to particlePosVBO...
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 2 * PARTICLE_NB, offsets.data(), GL_DYNAMIC_DRAW); // ... like this one!
     
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*) 0);
+    glVertexAttribDivisor(1, 1); // One change of value per instance
+
+    // Resetting the listening state of our buffers
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glVertexAttribDivisor(1, 1);
+    glBindVertexArray(0);
 
     // Render loop initialization
     while (!glfwWindowShouldClose(window))
@@ -321,17 +302,26 @@ int main()
         glClearColor(1.f, 1.f, 1.f, 1.f);
         glClear(GL_COLOR_BUFFER_BIT);
 
+        // Moving the particles
+        offsets.clear();
+        for (Particle& p: particles) 
+        {
+            p.update(0.05);
+            offsets.push_back(p.getX());
+            offsets.push_back(p.getY());
+        }
+
         // Drawing our objects
         glUseProgram(shaderProg);
-        glBindVertexArray(VAO);
-        //glDrawArrays(GL_TRIANGLES, 0, 3); // Without EBO
-        // OR
-        //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // With EBO
-        // OR
-        //glDrawArraysInstanced(GL_TRIANGLES, 0, 6, particles.size()); // Without EBO but with instancing
-        // OR
+        glBindVertexArray(VAO); // Setting our VAO when starting to use it...
+        glBindBuffer(GL_ARRAY_BUFFER, particlePosVBO);
+
+        glBufferSubData(GL_ARRAY_BUFFER, 0, offsets.size() * sizeof(float), offsets.data()); 
+        // ^ Can be used to replace specific parts in th buffer's memory
         glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, particles.size()); // With EBO and instancing
-        glBindVertexArray(0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0); // ... and un-setting it when we are done.
 
         glfwSwapBuffers(window);
         glfwPollEvents();    
