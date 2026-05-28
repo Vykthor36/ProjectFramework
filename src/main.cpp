@@ -27,7 +27,7 @@ const char* fragmentShaderSource = "#version 330 core\n"
     "}\n\0";
 
 static const int WINDOW_SIZE = 750;
-static const int PARTICLE_NB = 1;
+static const int PARTICLE_NB = 500;
 
 namespace Utilities
 {
@@ -58,6 +58,15 @@ namespace Utilities
         
         // #3: Merge the two parts together and return it 
         return "[" + string(res) + msBuffer + "]: ";
+    }
+
+    float getRandomNb(const float& start, const float& end)
+    {
+        // Generate a random number between start and end
+        //int randomNum = rand() % (end - start + 1) + start; // Only for integers
+        float randomNum = ((float) rand() / RAND_MAX) * (end - start) + start;
+
+        return randomNum;
     }
 
     namespace OGL
@@ -153,13 +162,15 @@ namespace Utilities
             return shaderProgram;
         }
 
-        const int createRectangle()
-        {         
+        const int createSquare(const float& size)
+        {   
+            const float pos = size / 2;
+
             float vertices[] = {
-                0.1f,  0.1f, 0.0f,  // Top right
-                0.1f, -0.1f, 0.0f,  // Bottom right
-                -0.1f, -0.1f, 0.0f,  // Bottom left
-                -0.1f,  0.1f, 0.0f   // Top left 
+                pos,  pos, 0.0f,  // Top right
+                pos, -pos, 0.0f,  // Bottom right
+                -pos, -pos, 0.0f,  // Bottom left
+                -pos,  pos, 0.0f   // Top left 
             };
 
             unsigned int indices[] = {
@@ -216,7 +227,7 @@ class Particle
             x += xSpeed * dt;
             y += ySpeed * dt;
 
-            cout << Utilities::getCurrentTime() << "New particle position (" << x << ", " << y << ") !" << endl; 
+            //cout << Utilities::getCurrentTime() << "New particle position (" << x << ", " << y << ") !" << endl; 
         }
 
         float getX() const
@@ -232,6 +243,9 @@ class Particle
 
 int main() 
 {
+    /* UTILITIES */
+    srand(time(0)); // Needed to make sure that random numbers are distinct from each other
+
     /* FRONTEND */
     // GLFW initialization
     glfwInit();
@@ -265,11 +279,14 @@ int main()
     int vertShader = Utilities::OGL::compileVertexShader();
     int fragShader = Utilities::OGL::compileFragmentShader();
     const int shaderProg = Utilities::OGL::createShaderProgram(vertShader, fragShader);
-    const int VAO = Utilities::OGL::createRectangle();
+    const int VAO = Utilities::OGL::createSquare(0.1);
 
     // Particule generation & offset creation
     std::vector<Particle> particles;
-    for (int i = 0; i < PARTICLE_NB; i++) particles.push_back(Particle(0, 0, .00025, .00058));
+    for (int i = 0; i < PARTICLE_NB; i++) particles.push_back(Particle(Utilities::getRandomNb(-.25, .25), 
+                                                                        Utilities::getRandomNb(-.25, .25),
+                                                                        Utilities::getRandomNb(-.025, .025), 
+                                                                        Utilities::getRandomNb(-.025, .025)));
     std::vector<float> offsets;
     for (const Particle& p : particles) 
     {
