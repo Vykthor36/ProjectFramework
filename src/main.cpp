@@ -27,7 +27,7 @@ const char* fragmentShaderSource = "#version 330 core\n"
     "}\n\0";
 
 static const int WINDOW_SIZE = 750;
-static const int PARTICLE_NB = 500;
+static const int PARTICLE_NB = 1000;
 
 namespace Utilities
 {
@@ -210,12 +210,12 @@ class Particle
         float ySpeed;
 
     public:
-        Particle() = default; // Empty constructor
+        //Particle() = default; // Empty constructor
         ~Particle() = default; // Destructor
         Particle(const float& x = 0.f, const float& y = 0.f, const float& xSpeed = 0.f, const float& ySpeed = 0.f) 
             : x(x), y(y), xSpeed(xSpeed), ySpeed(ySpeed) 
         { 
-            cout << Utilities::getCurrentTime() << "New particle at position (" << x << ", " << y << ") and speed (" << xSpeed << ", " << ySpeed << ") !" << endl; 
+            //cout << Utilities::getCurrentTime() << "New particle at position (" << x << ", " << y << ") and speed (" << xSpeed << ", " << ySpeed << ") !" << endl; 
         }
 
         Particle(const Particle&) = default; // Copy constructor
@@ -282,16 +282,16 @@ int main()
     const int VAO = Utilities::OGL::createSquare(0.1);
 
     // Particule generation & offset creation
-    std::vector<Particle> particles;
-    for (int i = 0; i < PARTICLE_NB; i++) particles.push_back(Particle(Utilities::getRandomNb(-.25, .25), 
+    std::vector<Particle> particles(PARTICLE_NB);
+    for (int i = 0; i < PARTICLE_NB; i++) particles[i] = Particle(Utilities::getRandomNb(-.25, .25), 
                                                                         Utilities::getRandomNb(-.25, .25),
                                                                         Utilities::getRandomNb(-.025, .025), 
-                                                                        Utilities::getRandomNb(-.025, .025)));
-    std::vector<float> offsets;
-    for (const Particle& p : particles) 
+                                                                        Utilities::getRandomNb(-.025, .025));
+    std::vector<float> offsets(PARTICLE_NB * 2);
+    for (int i = 0; i < PARTICLE_NB; i++) 
     {
-        offsets.push_back(p.getX()); 
-        offsets.push_back(p.getY());
+        offsets[i * 2] = particles[i].getX();
+        offsets[i * 2 + 1] = particles[i].getY();
     }
 
     unsigned int particlePosVBO;
@@ -320,12 +320,11 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT);
 
         // Moving the particles
-        offsets.clear();
-        for (Particle& p: particles) 
+        for (int i = 0; i < PARTICLE_NB; i++) 
         {
-            p.update(0.05);
-            offsets.push_back(p.getX());
-            offsets.push_back(p.getY());
+            particles[i].update(0.05);
+            offsets[i * 2] = particles[i].getX();
+            offsets[i * 2 + 1] = particles[i].getY();
         }
 
         // Drawing our objects
