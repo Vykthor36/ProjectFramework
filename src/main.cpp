@@ -2,6 +2,7 @@
 #include <ctime>
 #include <chrono>
 #include <vector>
+#include <array>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -13,10 +14,12 @@ using std::endl;
 
 const char* vertexShaderSource = "#version 330 core\n"
     "layout (location = 0) in vec3 aPos;\n"
-    "layout (location = 1) in vec2 aOffset;\n"
+    "layout (location = 1) in vec4 aParticleData;\n"
+    "\n"
+    "uniform float uTime;"
     "void main()\n"
     "{\n"
-    "   gl_Position = vec4(aPos.x + aOffset.x, aPos.y + aOffset.y, 0.0, 1.0);\n"
+    "   gl_Position = vec4(aPos.x + aParticleData.x + aParticleData.z * uTime, aPos.y + aParticleData.y + aParticleData.w * uTime, 0.0, 1.0);\n"
     "}\0";
 
 const char* fragmentShaderSource = "#version 330 core\n"
@@ -230,6 +233,11 @@ class Particle
             //cout << Utilities::getCurrentTime() << "New particle position (" << x << ", " << y << ") !" << endl; 
         }
 
+        std::array<float, 4> getGPUData() const
+        {
+            return {x, y, xSpeed, ySpeed};
+        }
+
         float getX() const
         {
             return x;
@@ -279,19 +287,23 @@ int main()
     int vertShader = Utilities::OGL::compileVertexShader();
     int fragShader = Utilities::OGL::compileFragmentShader();
     const int shaderProg = Utilities::OGL::createShaderProgram(vertShader, fragShader);
+    GLint uTime = glGetUniformLocation(shaderProg, "uTime");
     const int VAO = Utilities::OGL::createSquare(0.1);
 
     // Particule generation & offset creation
     std::vector<Particle> particles(PARTICLE_NB);
     for (int i = 0; i < PARTICLE_NB; i++) particles[i] = Particle(Utilities::getRandomNb(-.25, .25), 
                                                                         Utilities::getRandomNb(-.25, .25),
-                                                                        Utilities::getRandomNb(-.025, .025), 
-                                                                        Utilities::getRandomNb(-.025, .025));
-    std::vector<float> offsets(PARTICLE_NB * 2);
+                                                                        Utilities::getRandomNb(-1, 1), 
+                                                                        Utilities::getRandomNb(-1, 1));
+    std::vector<float> gpuData(PARTICLE_NB * 4);
     for (int i = 0; i < PARTICLE_NB; i++) 
     {
-        offsets[i * 2] = particles[i].getX();
-        offsets[i * 2 + 1] = particles[i].getY();
+        const auto pData = particles[i].getGPUData();
+        gpuData[i * 4] = pData[0];
+        gpuData[i * 4 + 1] = pData[1];
+        gpuData[i * 4 + 2] = pData[2];
+        gpuData[i * 4 + 3] = pData[3];
     }
 
     unsigned int particlePosVBO;
@@ -299,10 +311,10 @@ int main()
 
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, particlePosVBO); // Every 'GL_ARRAY_BUFFER' operation next are linked to particlePosVBO...
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 2 * PARTICLE_NB, offsets.data(), GL_DYNAMIC_DRAW); // ... like this one!
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 4 * PARTICLE_NB, gpuData.data(), GL_DYNAMIC_DRAW); // ... like this one!
     
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*) 0);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*) 0);
     glVertexAttribDivisor(1, 1); // One change of value per instance
 
     // Resetting the listening state of our buffers
@@ -310,8 +322,17 @@ int main()
     glBindVertexArray(0);
 
     // Render loop initialization
+    float firstTime = glfwGetTime();
+    float lastTime = firstTime;
     while (!glfwWindowShouldClose(window))
     {
+        // Getting our time variables
+        float currentTime = glfwGetTime();
+        //float dt = currentTime - lastTime;
+        float ut = currentTime - firstTime;
+        lastTime = currentTime;
+        glUniform1f(uTime, ut);
+
         // Input handling
         Utilities::OGL::processInput(window);
 
@@ -319,21 +340,12 @@ int main()
         glClearColor(1.f, 1.f, 1.f, 1.f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        // Moving the particles
-        for (int i = 0; i < PARTICLE_NB; i++) 
-        {
-            particles[i].update(0.05);
-            offsets[i * 2] = particles[i].getX();
-            offsets[i * 2 + 1] = particles[i].getY();
-        }
-
         // Drawing our objects
         glUseProgram(shaderProg);
+
         glBindVertexArray(VAO); // Setting our VAO when starting to use it...
         glBindBuffer(GL_ARRAY_BUFFER, particlePosVBO);
 
-        glBufferSubData(GL_ARRAY_BUFFER, 0, offsets.size() * sizeof(float), offsets.data()); 
-        // ^ Can be used to replace specific parts in th buffer's memory
         glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, particles.size()); // With EBO and instancing
 
         glBindBuffer(GL_ARRAY_BUFFER, 0);
