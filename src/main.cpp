@@ -12,25 +12,52 @@ using std::to_string;
 using std::cout;
 using std::endl;
 
-const char* vertexShaderSource = "#version 330 core\n"
+const char* vertexShaderSource = "#version 430 core\n"
     "layout (location = 0) in vec3 aPos;\n"
-    "layout (location = 1) in vec4 aParticleData;\n"
+    "layout (std430, binding = 0) buffer Particles\n"
+    "{\n"
+    "   vec4 particleData[];\n"
+    "};\n"
     "\n"
     "uniform float uTime;"
     "void main()\n"
     "{\n"
-    "   gl_Position = vec4(aPos.x + aParticleData.x + aParticleData.z * uTime, aPos.y + aParticleData.y + aParticleData.w * uTime, 0.0, 1.0);\n"
+    "   vec4 particle = particleData[gl_InstanceID];"
+    "   gl_Position = vec4(aPos.x + particle.x + particle.z * uTime, aPos.y + particle.y + particle.w * uTime, 0.0, 1.0);\n"
     "}\0";
 
-const char* fragmentShaderSource = "#version 330 core\n"
+const char* fragmentShaderSource = "#version 430 core\n"
     "out vec4 FragColor;\n"
     "void main()\n"
     "{\n"
     "   FragColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);\n"
     "}\n\0";
 
+const char* computeShaderSource = "#version 430 core\n"
+    "\n"
+    "layout (local_size_x = 256) in;\n"
+    "\n"
+    "struct Particle\n"
+    "{\n"
+    "   float x;\n"
+    "   float y;\n"
+    "   float xSpeed;\n"
+    "   float ySpeed;\n"
+    "};\n"
+    "\n"
+    "layout(std430, binding = 0) buffer Particles"
+    "{\n"
+    "   Particle particles[];\n"
+    "};\n"
+    "void main()\n"
+    "{\n"
+    "   uint id = gl_GlobalInvocationID.x;\n"
+    "   particles[id].x += 0; //TODO\n"
+    "}\n\0";
+
 static const int WINDOW_SIZE = 750;
-static const int PARTICLE_NB = 1000;
+static const int PARTICLE_NB = 500000;
+static const float PARTICLE_SIZE = 0.005;
 
 namespace Utilities
 {
@@ -97,6 +124,30 @@ namespace Utilities
             }
         }
 
+        // From zestedesavoir.com
+        void printWorkGroupsCapabilities() {
+            int workgroup_count[3];
+            int workgroup_size[3];
+            int workgroup_invocations;
+
+            glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 0, &workgroup_count[0]);
+            glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 1, &workgroup_count[1]);
+            glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 2, &workgroup_count[2]);
+
+            printf ("Max. size of the workgroups:\n\tx:%u\n\ty:%u\n\tz:%u\n",
+            workgroup_size[0], workgroup_size[1], workgroup_size[2]);
+
+            glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 0, &workgroup_size[0]);
+            glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 1, &workgroup_size[1]);
+            glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 2, &workgroup_size[2]);
+
+            printf ("Max. number of local invocation:\n\tx:%u\n\ty:%u\n\tz:%u\n",
+            workgroup_size[0], workgroup_size[1], workgroup_size[2]);
+
+            glGetIntegerv (GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS, &workgroup_invocations);
+            printf ("Max. number of workgroups invocations\n\t%u\n", workgroup_invocations);
+            }
+
         int compileVertexShader()
         {
             unsigned int vertexShader;
@@ -137,6 +188,46 @@ namespace Utilities
             }
 
             return fragmentShader;
+        }
+
+        int compileAndCreateComputeShader()
+        {
+            // Compiling the shader itself...
+            unsigned int computeShader;
+            computeShader = glCreateShader(GL_COMPUTE_SHADER);
+            glShaderSource(computeShader, 1, &computeShaderSource, NULL);
+            glCompileShader(computeShader);
+
+            int  success;
+            char infoLog[512];
+            glGetShaderiv(computeShader, GL_COMPILE_STATUS, &success);
+            if (!success)
+            {
+                glGetShaderInfoLog(computeShader, 512, NULL, infoLog);
+                std::cout << "ERROR::SHADER::COMPUTE::COMPILATION_FAILED\n" << infoLog << std::endl;
+
+                return 0;
+            }
+
+            // Creating the associated program...
+            unsigned int shaderProgram;
+            shaderProgram = glCreateProgram();
+
+            glAttachShader(shaderProgram, computeShader);
+            glLinkProgram(shaderProgram);
+
+            glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+            if (!success) 
+            {
+                glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
+                std::cout << "ERROR::SHADER::PROGRAM::COMPILATION_FAILED\n" << infoLog << std::endl;
+
+                return 0;
+            }
+            
+            glDeleteShader(computeShader);
+
+            return shaderProgram;
         }
 
         int createShaderProgram(const int& vertexShader, const int& fragmentShader)
@@ -257,10 +348,10 @@ int main()
     /* FRONTEND */
     // GLFW initialization
     glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    //glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); For macOS only
+    //glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); for macOS only
 
     // GLFW window initialization
     GLFWwindow* window = glfwCreateWindow(WINDOW_SIZE, WINDOW_SIZE, "Project Framework", NULL, NULL);
@@ -284,11 +375,12 @@ int main()
     glfwSetFramebufferSizeCallback(window, Utilities::OGL::framebufferSizeCallback);
 
     // Shadering initialization
+    const int computeShaderProg = Utilities::OGL::compileAndCreateComputeShader();
     int vertShader = Utilities::OGL::compileVertexShader();
     int fragShader = Utilities::OGL::compileFragmentShader();
     const int shaderProg = Utilities::OGL::createShaderProgram(vertShader, fragShader);
     GLint uTime = glGetUniformLocation(shaderProg, "uTime");
-    const int VAO = Utilities::OGL::createSquare(0.1);
+    const int VAO = Utilities::OGL::createSquare(PARTICLE_SIZE);
 
     // Particule generation & offset creation
     std::vector<Particle> particles(PARTICLE_NB);
@@ -306,6 +398,7 @@ int main()
         gpuData[i * 4 + 3] = pData[3];
     }
 
+    /* BEING REPLACED BY A SHADER STORAGE BUFFER OBJECT (SSBO)
     unsigned int particlePosVBO;
     glGenBuffers(1, &particlePosVBO);
 
@@ -315,11 +408,26 @@ int main()
     
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*) 0);
-    glVertexAttribDivisor(1, 1); // One change of value per instance
-
+    glVertexAttribDivisor(1, 1); // One change of value per instance 
+    
     // Resetting the listening state of our buffers
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+    glBindVertexArray(0);*/
+
+    // Init. of our SSBO
+    GLuint ssbo;
+    glGenBuffers(1, &ssbo);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+
+    glBufferData(
+        GL_SHADER_STORAGE_BUFFER,
+        gpuData.size() * sizeof(float),
+        gpuData.data(),
+        GL_DYNAMIC_DRAW
+    );
+
+    // ...
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
 
     // Render loop initialization
     float firstTime = glfwGetTime();
@@ -331,7 +439,6 @@ int main()
         //float dt = currentTime - lastTime;
         float ut = currentTime - firstTime;
         lastTime = currentTime;
-        glUniform1f(uTime, ut);
 
         // Input handling
         Utilities::OGL::processInput(window);
@@ -340,15 +447,22 @@ int main()
         glClearColor(1.f, 1.f, 1.f, 1.f);
         glClear(GL_COLOR_BUFFER_BIT);
 
+        // Computing our particles on the GPU through the compute shader
+        glUseProgram(computeShaderProg);
+        glDispatchCompute(PARTICLE_NB, 1, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
         // Drawing our objects
         glUseProgram(shaderProg);
 
+        glUniform1f(uTime, ut);
+
         glBindVertexArray(VAO); // Setting our VAO when starting to use it...
-        glBindBuffer(GL_ARRAY_BUFFER, particlePosVBO);
+        //glBindBuffer(GL_ARRAY_BUFFER, particlePosVBO); We are now using the SSBO for that!
 
-        glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, particles.size()); // With EBO and instancing
+        glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, PARTICLE_NB); // With EBO or SSBO and instancing
 
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        //glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0); // ... and un-setting it when we are done.
 
         glfwSwapBuffers(window);
