@@ -19,11 +19,10 @@ const char* vertexShaderSource = "#version 430 core\n"
     "   vec4 particleData[];\n"
     "};\n"
     "\n"
-    "uniform float uTime;"
     "void main()\n"
     "{\n"
-    "   vec4 particle = particleData[gl_InstanceID];"
-    "   gl_Position = vec4(aPos.x + particle.x + particle.z * uTime, aPos.y + particle.y + particle.w * uTime, 0.0, 1.0);\n"
+    "   vec4 particle = particleData[gl_InstanceID];\n"
+    "   gl_Position = vec4(aPos.x + particle.x, aPos.y + particle.y, 0.0, 1.0);\n"
     "}\0";
 
 const char* fragmentShaderSource = "#version 430 core\n"
@@ -45,14 +44,17 @@ const char* computeShaderSource = "#version 430 core\n"
     "   float ySpeed;\n"
     "};\n"
     "\n"
-    "layout(std430, binding = 0) buffer Particles"
+    "layout(std430, binding = 0) buffer Particles\n"
     "{\n"
     "   Particle particles[];\n"
     "};\n"
+    "\n"
+    "uniform float dTime;\n"
     "void main()\n"
     "{\n"
     "   uint id = gl_GlobalInvocationID.x;\n"
-    "   particles[id].x += 0; //TODO\n"
+    "   particles[id].x += particles[id].xSpeed * dTime;\n"
+    "   particles[id].y += particles[id].ySpeed * dTime;\n"
     "}\n\0";
 
 static const int WINDOW_SIZE = 750;
@@ -376,10 +378,10 @@ int main()
 
     // Shadering initialization
     const int computeShaderProg = Utilities::OGL::compileAndCreateComputeShader();
+    GLint dTime = glGetUniformLocation(computeShaderProg, "dTime");
     int vertShader = Utilities::OGL::compileVertexShader();
     int fragShader = Utilities::OGL::compileFragmentShader();
     const int shaderProg = Utilities::OGL::createShaderProgram(vertShader, fragShader);
-    GLint uTime = glGetUniformLocation(shaderProg, "uTime");
     const int VAO = Utilities::OGL::createSquare(PARTICLE_SIZE);
 
     // Particule generation & offset creation
@@ -397,22 +399,6 @@ int main()
         gpuData[i * 4 + 2] = pData[2];
         gpuData[i * 4 + 3] = pData[3];
     }
-
-    /* BEING REPLACED BY A SHADER STORAGE BUFFER OBJECT (SSBO)
-    unsigned int particlePosVBO;
-    glGenBuffers(1, &particlePosVBO);
-
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, particlePosVBO); // Every 'GL_ARRAY_BUFFER' operation next are linked to particlePosVBO...
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 4 * PARTICLE_NB, gpuData.data(), GL_DYNAMIC_DRAW); // ... like this one!
-    
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*) 0);
-    glVertexAttribDivisor(1, 1); // One change of value per instance 
-    
-    // Resetting the listening state of our buffers
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);*/
 
     // Init. of our SSBO
     GLuint ssbo;
@@ -436,8 +422,8 @@ int main()
     {
         // Getting our time variables
         float currentTime = glfwGetTime();
-        //float dt = currentTime - lastTime;
-        float ut = currentTime - firstTime;
+        float dt = currentTime - lastTime;
+        //float ut = currentTime - firstTime;
         lastTime = currentTime;
 
         // Input handling
@@ -449,13 +435,12 @@ int main()
 
         // Computing our particles on the GPU through the compute shader
         glUseProgram(computeShaderProg);
-        glDispatchCompute(PARTICLE_NB, 1, 1);
+        glUniform1f(dTime, dt);
+        glDispatchCompute((PARTICLE_NB + 255) / 256, 1, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
         // Drawing our objects
         glUseProgram(shaderProg);
-
-        glUniform1f(uTime, ut);
 
         glBindVertexArray(VAO); // Setting our VAO when starting to use it...
         //glBindBuffer(GL_ARRAY_BUFFER, particlePosVBO); We are now using the SSBO for that!
