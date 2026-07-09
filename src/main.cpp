@@ -3,6 +3,8 @@
 #include <chrono>
 #include <vector>
 #include <array>
+#include <fstream>
+#include <sstream>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -12,50 +14,9 @@ using std::to_string;
 using std::cout;
 using std::endl;
 
-const char* vertexShaderSource = "#version 430 core\n"
-    "layout (location = 0) in vec3 aPos;\n"
-    "layout (std430, binding = 0) buffer Particles\n"
-    "{\n"
-    "   vec4 particleData[];\n"
-    "};\n"
-    "\n"
-    "void main()\n"
-    "{\n"
-    "   vec4 particle = particleData[gl_InstanceID];\n"
-    "   gl_Position = vec4(aPos.x + particle.x, aPos.y + particle.y, 0.0, 1.0);\n"
-    "}\0";
-
-const char* fragmentShaderSource = "#version 430 core\n"
-    "out vec4 FragColor;\n"
-    "void main()\n"
-    "{\n"
-    "   FragColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);\n"
-    "}\n\0";
-
-const char* computeShaderSource = "#version 430 core\n"
-    "\n"
-    "layout (local_size_x = 256) in;\n"
-    "\n"
-    "struct Particle\n"
-    "{\n"
-    "   float x;\n"
-    "   float y;\n"
-    "   float xSpeed;\n"
-    "   float ySpeed;\n"
-    "};\n"
-    "\n"
-    "layout(std430, binding = 0) buffer Particles\n"
-    "{\n"
-    "   Particle particles[];\n"
-    "};\n"
-    "\n"
-    "uniform float dTime;\n"
-    "void main()\n"
-    "{\n"
-    "   uint id = gl_GlobalInvocationID.x;\n"
-    "   particles[id].x += particles[id].xSpeed * dTime;\n"
-    "   particles[id].y += particles[id].ySpeed * dTime;\n"
-    "}\n\0";
+static const std::string COMPUTE_SHADER_PATH = "../src/shaders/compute.glsl";
+static const std::string VERTEX_SHADER_PATH = "../src/shaders/vertex.glsl";
+static const std::string FRAGMENT_SHADER_PATH = "../src/shaders/fragment.glsl";
 
 static const int WINDOW_SIZE = 750;
 static const int PARTICLE_NB = 500000;
@@ -99,6 +60,20 @@ namespace Utilities
         float randomNum = ((float) rand() / RAND_MAX) * (end - start) + start;
 
         return randomNum;
+    }
+
+    std::string readFile(const std::string& filePath)
+    {
+        std::ifstream file(filePath);
+        std::stringstream buffer;
+
+        if (!file.is_open()) {
+            std::cerr << "Error! Impossible to open the following file: " << filePath << std::endl;
+            return "";
+        }
+
+        buffer << file.rdbuf();
+        return buffer.str();
     }
 
     namespace OGL
@@ -154,7 +129,9 @@ namespace Utilities
         {
             unsigned int vertexShader;
             vertexShader = glCreateShader(GL_VERTEX_SHADER);
-            glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+            std::string fSource = readFile(VERTEX_SHADER_PATH);
+            const char* f = fSource.c_str();
+            glShaderSource(vertexShader, 1, &f, NULL);
             glCompileShader(vertexShader);
 
             int  success;
@@ -175,7 +152,9 @@ namespace Utilities
         {
             unsigned int fragmentShader;
             fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-            glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+            std::string fSource = readFile(FRAGMENT_SHADER_PATH);
+            const char* f = fSource.c_str();
+            glShaderSource(fragmentShader, 1, &f, NULL);
             glCompileShader(fragmentShader);
 
             int  success;
@@ -197,7 +176,9 @@ namespace Utilities
             // Compiling the shader itself...
             unsigned int computeShader;
             computeShader = glCreateShader(GL_COMPUTE_SHADER);
-            glShaderSource(computeShader, 1, &computeShaderSource, NULL);
+            std::string fSource = readFile(COMPUTE_SHADER_PATH);
+            const char* f = fSource.c_str();
+            glShaderSource(computeShader, 1, &f, NULL);
             glCompileShader(computeShader);
 
             int  success;
