@@ -9,14 +9,16 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#include <imgui.h>
+
 using std::string;
 using std::to_string;
 using std::cout;
 using std::endl;
 
-static const std::string COMPUTE_SHADER_PATH = "../src/shaders/compute.glsl";
-static const std::string VERTEX_SHADER_PATH = "../src/shaders/vertex.glsl";
-static const std::string FRAGMENT_SHADER_PATH = "../src/shaders/fragment.glsl";
+static const std::string COMPUTE_SHADER_PATH = "src/shaders/compute.glsl";
+static const std::string VERTEX_SHADER_PATH = "src/shaders/vertex.glsl";
+static const std::string FRAGMENT_SHADER_PATH = "src/shaders/fragment.glsl";
 
 static const int WINDOW_SIZE = 750;
 static const int PARTICLE_NB = 500000;
@@ -432,11 +434,8 @@ int main()
         glBindVertexArray(0); // ... and un-setting it when we are done.
 
         glfwSwapBuffers(window);
-        glfwPollEvents();    
+        glfwPollEvents();
     }
-
-    // Properly closing GLFW
-    glfwTerminate();
 
     return 0;
 }
